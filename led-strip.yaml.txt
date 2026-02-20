@@ -40,8 +40,8 @@ bluetooth_proxy:
 esp32_ble_tracker:
 
 sun:
-  latitude: 46.2931°
-  longitude: 30.3438°
+  latitude: 50.2931°
+  longitude: 70.3438°
   id: sun_comp
 
 number:
