@@ -1,6 +1,8 @@
 # Led-strip
 
-Simple LED strip controller
+Simple LED strip controller 
+
+[Watch video: Smart lamp on ESP32](https://youtu.be/PTHa0VXJ8ds)
 
 
 <p align="center">
