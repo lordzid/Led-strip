@@ -1,0 +1,180 @@
+esphome:
+  name: led-strip
+  friendly_name: "LED Controller"
+
+
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+wifi:
+  networks:
+    - ssid: 
+      password: 
+    
+  ap: 
+    ssid: "led-strip"
+
+
+api:
+ota:
+  - platform: esphome
+  - platform: web_server
+    
+
+logger:
+
+web_server:
+  port: 80
+
+time:
+  - platform: sntp
+    id: ledstripsntp_time
+    timezone: "Europe/Kiev"
+
+  - platform: homeassistant
+
+bluetooth_proxy:
+esp32_ble_tracker:
+
+sun:
+  latitude: 46.2931°
+  longitude: 30.3438°
+  id: sun_comp
+
+number:
+  - platform: template
+    name: "Sun Threshold"
+    id: sun_threshold
+    min_value: -6
+    max_value: 6
+    step: 0.5
+    initial_value: -3.0
+    restore_value: true
+    optimistic: true
+
+output:
+  - platform: ledc
+    pin: GPIO14
+    id: led_pwm_out
+    frequency: 1000Hz
+
+switch:
+  - platform: gpio
+    pin: GPIO16
+    id: relay_pin
+    restore_mode: RESTORE_DEFAULT_OFF
+    internal: true
+
+  - platform: template
+    name: "Sun Automation Enabled"
+    id: sun_auto_enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+
+  - platform: restart
+    name: "Restart"
+
+light:
+  - platform: monochromatic
+    name: "Main LED Strip"
+    id: main_light
+    output: led_pwm_out
+    default_transition_length: 2s
+    on_turn_on:
+      - switch.turn_on: relay_pin
+    on_turn_off:
+      - delay: 2.1s # Час трохи більший за transition, щоб реле не клацало завчасно
+      - switch.turn_off: relay_pin
+
+  - platform: status_led
+    id: status_led_strip
+    name: "Status led"
+    pin: 23
+
+sensor:
+  - platform: sun
+    type: elevation
+    id: sun_elevation_val
+    update_interval: 30s
+    on_value:
+      then:
+        - if:
+            condition:
+              # Перевірка: автоматика увімкнена ТА сонце нижче порогу ТА світло ще вимкнене
+              lambda: |-
+                return id(sun_auto_enabled).state && 
+                       (x <= id(sun_threshold).state) && 
+                       (!id(main_light).remote_values.is_on());
+            then:
+              - light.turn_on:
+                  id: main_light
+                  brightness: 25%
+        - if:
+            condition:
+              # Гістерезис +0.5: вимикаємо лише коли сонце впевнено піднялося
+              lambda: |-
+                return (x > id(sun_threshold).state + 0.5f) && 
+                       (id(main_light).remote_values.is_on());
+            then:
+              - light.turn_off: main_light
+
+  - platform: sun
+    name: Sun Elevation
+    type: elevation
+  - platform: sun
+    name: Sun Azimuth
+    type: azimuth
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO0
+      inverted: true
+      mode: INPUT_PULLUP
+    id: physical_button
+    on_press:
+      - light.toggle: main_light
+
+
+  - platform: status
+    name: "Led strip Status"
+    id: led_strip_status
+
+select:
+  - platform: template
+    name: "Brightness Preset"
+    id: br_preset
+    options: ["Off", "25%", "40%", "60%", "80%", "100%"]
+    optimistic: true
+    set_action:
+      - lambda: |-
+          auto call = id(main_light).make_call();
+          if (x == "Off") {
+            call.set_state(false);
+          } else {
+            float br = 0.0f;
+            if (x == "25%") br = 0.25f;
+            else if (x == "40%") br = 0.40f;
+            else if (x == "60%") br = 0.60f;
+            else if (x == "80%") br = 0.80f;
+            else if (x == "100%") br = 1.00f;
+            call.set_state(true);
+            call.set_brightness(br);
+          }
+          call.perform();
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name:  IP Address
+    ssid:
+      name:  Connected SSID
+    bssid:
+      name:  Connected BSSID
+    mac_address:
+      name:  Mac Wifi Address
+    scan_results:
+      name:  Latest Scan Results
